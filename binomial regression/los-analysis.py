@@ -132,6 +132,10 @@ los_p95 = np.percentile(df_clean['los_trunc'].dropna(), 95)
 df_clean['los_capped'] = df_clean['los_trunc'].copy()
 df_clean.loc[df_clean['los_capped'] > los_p95, 'los_capped'] = los_p95
 
+df_clean = df_clean[df_clean['los_trunc'] <= los_p95]
+print(f"After filtering to 95th percentile, remaining observations: {len(df_clean)}")
+
+
 # Visualize the capped los distribution
 plt.figure(figsize=(10, 6))
 sns.histplot(df_clean['los_capped'], discrete=True)
@@ -503,3 +507,5 @@ else:
     print("Document not saved as no location was selected.")
 
 print("\nAnalysis complete.")
+
+
