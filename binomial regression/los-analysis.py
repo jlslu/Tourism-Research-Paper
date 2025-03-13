@@ -8,7 +8,6 @@ from statsmodels.genmod.families.family import NegativeBinomial
 import tkinter as tk
 from tkinter import filedialog
 from scipy import stats
-import docx
 from docx import Document
 from docx.shared import Inches
 from io import BytesIO
@@ -127,18 +126,18 @@ print(missing_values_count)
 df_clean = df[df['missing'] == 0].drop('missing', axis=1)
 print(f"\nRemaining observations after dropping missing values: {len(df_clean)}")
 
-
 # Step 2: Drop outliers in length of stay
 los_p95 = np.percentile(df_clean['los_trunc'].dropna(), 95)
 df_clean['los_capped'] = df_clean['los_trunc'].copy()
 df_clean.loc[df_clean['los_capped'] > los_p95, 'los_capped'] = los_p95
 
+# Filter to only keep rows within the 95th percentile
 df_clean = df_clean[df_clean['los_trunc'] <= los_p95]
 print(f"After filtering to 95th percentile, remaining observations: {len(df_clean)}")
 
+# Reset index to ensure consistency
 df_clean = df_clean.reset_index(drop=True)
 print(f"Shape after resetting index: {df_clean.shape}")
-
 
 # Visualize the capped los distribution
 plt.figure(figsize=(10, 6))
@@ -415,8 +414,6 @@ try:
     doc.add_heading('Approximated Multilevel Model', level=1)
     doc.add_paragraph('Using MixedLM to approximate a multilevel model with random effects for states.')
     
-    
-    
     if 'us_state_enc' in df_clean.columns:
         try:
             # Debug the data state before processing
@@ -434,13 +431,14 @@ try:
             # Filter to complete cases
             model_data = df_clean.dropna(subset=all_vars).reset_index(drop=True)
             print("Model data shape:", model_data.shape)
-        
+            
+            # Create y and X for mixed model
             y = model_data['los_capped']
             X = model_data[X_vars].copy()
-        
+            
             # Add categorical variables (one-hot encoded)
             for var in categorical_model_vars:
-                if var in model_data.columns and var != 'us_state_enc':  # Exclude the grouping variable
+                if var in model_data.columns and var != 'us_state_enc':
                     dummies = pd.get_dummies(model_data[var], prefix=var, drop_first=True)
                     X = pd.concat([X, dummies], axis=1)
             
@@ -448,47 +446,83 @@ try:
             X = sm.add_constant(X)
             
             # Define groups for random effects
-            groups =model_data['us_state_enc']
+            groups = model_data['us_state_enc']
+            
+            # Check dimensions before fitting
+            print(f"X shape: {X.shape}, y length: {len(y)}, groups length: {len(groups)}")
+            assert len(y) == X.shape[0] == len(groups), "Dimension mismatch detected!"
             
             # Fit mixed effects model
             mixed_model = MixedLM(y, X, groups)
-            try:
-                mixed_results = mixed_model.fit()
-                mixed_summary = str(mixed_results.summary())
-                print("\nApproximated Multilevel Model Results:")
-                print(mixed_summary)
+            mixed_results = mixed_model.fit()
+            mixed_summary = str(mixed_results.summary())
+            print("\nApproximated Multilevel Model Results:")
+            print(mixed_summary)
+            
+            # Add to document
+            doc.add_paragraph('Model Summary:')
+            doc.add_paragraph(f"Number of observations: {len(model_data)}")
+            for line in mixed_summary.split('\n'):
+                doc.add_paragraph(line)
+            
+            # Add variance components
+            doc.add_paragraph('\nVariance Components:')
+            vc_table = doc.add_table(rows=3, cols=2)
+            vc_table.style = 'Table Grid'
+            vc_table.cell(0, 0).text = 'Component'
+            vc_table.cell(0, 1).text = 'Estimate'
+            vc_table.cell(1, 0).text = 'State Random Effect Variance'
+            vc_table.cell(1, 1).text = f"{mixed_results.cov_re.iloc[0, 0]:.4f}"
+            vc_table.cell(2, 0).text = 'Residual Variance'
+            vc_table.cell(2, 1).text = f"{mixed_results.scale:.4f}"
+            
+            # Calculate intraclass correlation coefficient (ICC)
+            state_var = mixed_results.cov_re.iloc[0, 0]
+            residual_var = mixed_results.scale
+            icc = state_var / (state_var + residual_var)
+            
+            doc.add_paragraph(f'\nIntraclass Correlation Coefficient (ICC): {icc:.4f}')
+            doc.add_paragraph('The ICC represents the proportion of the total variance in length of stay ' +
+                             'that is attributable to differences between states.')
+            
+            # Convert mixed model coefficients to IRR with labels
+            mixed_irr = np.exp(mixed_results.params)
+            mixed_conf = np.exp(mixed_results.conf_int())
+            mixed_irr_df = pd.DataFrame({
+                'IRR': mixed_irr, 
+                'Lower CI': mixed_conf[0], 
+                'Upper CI': mixed_conf[1],
+                'P-value': mixed_results.pvalues
+            })
+            
+            # Use the same dummy_names dictionary for consistent labeling
+            mixed_param_names = list(mixed_results.params.index)
+            mixed_irr_df.index = [dummy_names.get(idx, idx) for idx in mixed_param_names]
+            
+            # Add mixed model IRR table to document
+            doc.add_paragraph('\n')
+            doc.add_heading('Mixed Model Incident Rate Ratios (IRR)', level=2)
+            mixed_irr_table = doc.add_table(rows=len(mixed_irr_df)+1, cols=5)
+            mixed_irr_table.style = 'Table Grid'
+            mixed_irr_table.cell(0, 0).text = 'Variable'
+            mixed_irr_table.cell(0, 1).text = 'IRR'
+            mixed_irr_table.cell(0, 2).text = 'Lower CI'
+            mixed_irr_table.cell(0, 3).text = 'Upper CI'
+            mixed_irr_table.cell(0, 4).text = 'P-value'
+            
+            for i, (var, row) in enumerate(mixed_irr_df.iterrows(), 1):
+                mixed_irr_table.cell(i, 0).text = str(var)
+                mixed_irr_table.cell(i, 1).text = f"{row['IRR']:.4f}"
+                mixed_irr_table.cell(i, 2).text = f"{row['Lower CI']:.4f}"
+                mixed_irr_table.cell(i, 3).text = f"{row['Upper CI']:.4f}"
+                mixed_irr_table.cell(i, 4).text = f"{row['P-value']:.4f}"
                 
-                # Add to document
-                doc.add_paragraph('Model Summary:')
-                for line in mixed_summary.split('\n'):
-                    doc.add_paragraph(line)
-                
-                # Add variance components
-                doc.add_paragraph('\nVariance Components:')
-                vc_table = doc.add_table(rows=3, cols=2)
-                vc_table.style = 'Table Grid'
-                vc_table.cell(0, 0).text = 'Component'
-                vc_table.cell(0, 1).text = 'Estimate'
-                vc_table.cell(1, 0).text = 'State Random Effect Variance'
-                vc_table.cell(1, 1).text = f"{mixed_results.cov_re.iloc[0, 0]:.4f}"
-                vc_table.cell(2, 0).text = 'Residual Variance'
-                vc_table.cell(2, 1).text = f"{mixed_results.scale:.4f}"
-                
-                # Calculate intraclass correlation coefficient (ICC)
-                state_var = mixed_results.cov_re.iloc[0, 0]
-                residual_var = mixed_results.scale
-                icc = state_var / (state_var + residual_var)
-                
-                doc.add_paragraph(f'\nIntraclass Correlation Coefficient (ICC): {icc:.4f}')
-                doc.add_paragraph('The ICC represents the proportion of the total variance in length of stay ' +
-                                'that is attributable to differences between states.')
-                
-            except Exception as e:
-                error_msg = f"Error fitting mixed model: {str(e)}"
-                print(error_msg)
-                doc.add_paragraph(error_msg)
-                doc.add_paragraph("The mixed effects model failed to converge. This can happen due to " +
-                                "insufficient variation in the grouping variable or other model specification issues.")
+        except Exception as e:
+            error_msg = f"Error fitting mixed model: {str(e)}"
+            print(error_msg)
+            doc.add_paragraph(error_msg)
+            doc.add_paragraph("The mixed effects model failed to converge. This can happen due to " +
+                             "insufficient variation in the grouping variable or other model specification issues.")
     else:
         no_state_msg = "State variable not found for multilevel modeling."
         print(no_state_msg)
@@ -517,5 +551,3 @@ else:
     print("Document not saved as no location was selected.")
 
 print("\nAnalysis complete.")
-
-
