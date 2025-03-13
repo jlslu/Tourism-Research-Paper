@@ -127,6 +127,7 @@ print(missing_values_count)
 df_clean = df[df['missing'] == 0].drop('missing', axis=1)
 print(f"\nRemaining observations after dropping missing values: {len(df_clean)}")
 
+
 # Step 2: Drop outliers in length of stay
 los_p95 = np.percentile(df_clean['los_trunc'].dropna(), 95)
 df_clean['los_capped'] = df_clean['los_trunc'].copy()
@@ -134,6 +135,9 @@ df_clean.loc[df_clean['los_capped'] > los_p95, 'los_capped'] = los_p95
 
 df_clean = df_clean[df_clean['los_trunc'] <= los_p95]
 print(f"After filtering to 95th percentile, remaining observations: {len(df_clean)}")
+
+df_clean = df_clean.reset_index(drop=True)
+print(f"Shape after resetting index: {df_clean.shape}")
 
 
 # Visualize the capped los distribution
@@ -414,71 +418,77 @@ try:
     
     
     if 'us_state_enc' in df_clean.columns:
-        # For demonstration, we'll use a linear mixed model as an approximation
-        # Prepare model variables
-        y = df_clean['los_capped']
-        
-        # Create X matrix for fixed effects
-        X_vars = []
-        for var in continuous_vars:
-            if var in df_clean.columns:
-                X_vars.append(var)
-        
-        model_data = df_clean.dropna(subset=[*X_vars, 'los_capped', 'us_state_enc'])
-        y = model_data['los_capped']
-        X = model_data[X_vars].copy()
-        
-        # Add categorical variables (one-hot encoded)
-        for var in categorical_model_vars:
-            if var in model_data.columns and var != 'us_state_enc':  # Exclude the grouping variable
-                dummies = pd.get_dummies(model_data[var], prefix=var, drop_first=True)
-                X = pd.concat([X, dummies], axis=1)
-        
-        # Add intercept
-        X = sm.add_constant(X)
-        
-        # Define groups for random effects
-        groups =model_data['us_state_enc']
-        
-        # Fit mixed effects model
-        mixed_model = MixedLM(y, X, groups)
         try:
-            mixed_results = mixed_model.fit()
-            mixed_summary = str(mixed_results.summary())
-            print("\nApproximated Multilevel Model Results:")
-            print(mixed_summary)
+            # Debug the data state before processing
+            print("Current df_clean shape:", df_clean.shape)
+            print("Column count in categorical_model_vars:", len(categorical_model_vars))
             
-            # Add to document
-            doc.add_paragraph('Model Summary:')
-            for line in mixed_summary.split('\n'):
-                doc.add_paragraph(line)
+            # Create X_vars list with continuous variables
+            X_vars = [var for var in continuous_vars if var in df_clean.columns]
+            print("X_vars:", X_vars)
             
-            # Add variance components
-            doc.add_paragraph('\nVariance Components:')
-            vc_table = doc.add_table(rows=3, cols=2)
-            vc_table.style = 'Table Grid'
-            vc_table.cell(0, 0).text = 'Component'
-            vc_table.cell(0, 1).text = 'Estimate'
-            vc_table.cell(1, 0).text = 'State Random Effect Variance'
-            vc_table.cell(1, 1).text = f"{mixed_results.cov_re.iloc[0, 0]:.4f}"
-            vc_table.cell(2, 0).text = 'Residual Variance'
-            vc_table.cell(2, 1).text = f"{mixed_results.scale:.4f}"
+            # Create complete subset list for filtering
+            all_vars = X_vars + ['los_capped', 'us_state_enc'] + categorical_model_vars
+            print("Total variables for model:", len(all_vars))
             
-            # Calculate intraclass correlation coefficient (ICC)
-            state_var = mixed_results.cov_re.iloc[0, 0]
-            residual_var = mixed_results.scale
-            icc = state_var / (state_var + residual_var)
+            # Filter to complete cases
+            model_data = df_clean.dropna(subset=all_vars).reset_index(drop=True)
+            print("Model data shape:", model_data.shape)
+        
+            y = model_data['los_capped']
+            X = model_data[X_vars].copy()
+        
+            # Add categorical variables (one-hot encoded)
+            for var in categorical_model_vars:
+                if var in model_data.columns and var != 'us_state_enc':  # Exclude the grouping variable
+                    dummies = pd.get_dummies(model_data[var], prefix=var, drop_first=True)
+                    X = pd.concat([X, dummies], axis=1)
             
-            doc.add_paragraph(f'\nIntraclass Correlation Coefficient (ICC): {icc:.4f}')
-            doc.add_paragraph('The ICC represents the proportion of the total variance in length of stay ' +
-                             'that is attributable to differences between states.')
+            # Add intercept
+            X = sm.add_constant(X)
             
-        except Exception as e:
-            error_msg = f"Error fitting mixed model: {str(e)}"
-            print(error_msg)
-            doc.add_paragraph(error_msg)
-            doc.add_paragraph("The mixed effects model failed to converge. This can happen due to " +
-                             "insufficient variation in the grouping variable or other model specification issues.")
+            # Define groups for random effects
+            groups =model_data['us_state_enc']
+            
+            # Fit mixed effects model
+            mixed_model = MixedLM(y, X, groups)
+            try:
+                mixed_results = mixed_model.fit()
+                mixed_summary = str(mixed_results.summary())
+                print("\nApproximated Multilevel Model Results:")
+                print(mixed_summary)
+                
+                # Add to document
+                doc.add_paragraph('Model Summary:')
+                for line in mixed_summary.split('\n'):
+                    doc.add_paragraph(line)
+                
+                # Add variance components
+                doc.add_paragraph('\nVariance Components:')
+                vc_table = doc.add_table(rows=3, cols=2)
+                vc_table.style = 'Table Grid'
+                vc_table.cell(0, 0).text = 'Component'
+                vc_table.cell(0, 1).text = 'Estimate'
+                vc_table.cell(1, 0).text = 'State Random Effect Variance'
+                vc_table.cell(1, 1).text = f"{mixed_results.cov_re.iloc[0, 0]:.4f}"
+                vc_table.cell(2, 0).text = 'Residual Variance'
+                vc_table.cell(2, 1).text = f"{mixed_results.scale:.4f}"
+                
+                # Calculate intraclass correlation coefficient (ICC)
+                state_var = mixed_results.cov_re.iloc[0, 0]
+                residual_var = mixed_results.scale
+                icc = state_var / (state_var + residual_var)
+                
+                doc.add_paragraph(f'\nIntraclass Correlation Coefficient (ICC): {icc:.4f}')
+                doc.add_paragraph('The ICC represents the proportion of the total variance in length of stay ' +
+                                'that is attributable to differences between states.')
+                
+            except Exception as e:
+                error_msg = f"Error fitting mixed model: {str(e)}"
+                print(error_msg)
+                doc.add_paragraph(error_msg)
+                doc.add_paragraph("The mixed effects model failed to converge. This can happen due to " +
+                                "insufficient variation in the grouping variable or other model specification issues.")
     else:
         no_state_msg = "State variable not found for multilevel modeling."
         print(no_state_msg)
