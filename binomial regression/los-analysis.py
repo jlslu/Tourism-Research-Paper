@@ -8,7 +8,6 @@ from statsmodels.genmod.families.family import NegativeBinomial
 import tkinter as tk
 from tkinter import filedialog
 from scipy import stats
-import docx
 from docx import Document
 from docx.shared import Inches
 from io import BytesIO
@@ -276,36 +275,6 @@ for var in categorical_model_vars:
 formula = 'los_capped ~ ' + ' + '.join(formula_parts)
 print(f"Model formula: {formula}")
 
-# Create a dictionary to map encoded values to their labels
-sex_labels = {0: 'Male', 1: 'Female', 2: 'Other'}
-marital_labels = {0: 'Single', 1: 'Married', 2: 'Divorced', 3: 'Widowed'}
-employment_labels = {0: 'Employed', 1: 'Self-employed', 2: 'Unemployed', 3: 'Retired'}
-accomd_labels = {0: 'Hotel', 1: 'Airbnb', 2: 'Private_Residence'}
-
-# Create more descriptive dummy_names
-dummy_names = {}
-# Purpose mapping already exists
-for var in categorical_model_vars:
-    if var in df_clean.columns:
-        values = sorted(df_clean[var].unique())
-        for val in values:
-            if var == 'purpose_simple':
-                dummy_names[f"C({var})[T.{val}]"] = f"Purpose_{purpose_labels.get(val, val)}"
-            elif var == 'sex_enc':
-                dummy_names[f"C({var})[T.{val}]"] = f"Sex_{sex_labels.get(val, val)}"
-            elif var == 'marital_status_enc':
-                dummy_names[f"C({var})[T.{val}]"] = f"MaritalStatus_{marital_labels.get(val, val)}"
-            elif var == 'employment_status_enc':
-                dummy_names[f"C({var})[T.{val}]"] = f"Employment_{employment_labels.get(val, val)}"
-            elif var == 'accomd_type_enc':
-                dummy_names[f"C({var})[T.{val}]"] = f"Accommodation_{accomd_labels.get(val, val)}"
-            elif var == 'month_travel':
-                month_names = {1:'Jan', 2:'Feb', 3:'Mar', 4:'Apr', 5:'May', 6:'Jun', 
-                              7:'Jul', 8:'Aug', 9:'Sep', 10:'Oct', 11:'Nov', 12:'Dec'}
-                dummy_names[f"C({var})[T.{val}]"] = f"Month_{month_names.get(val, val)}"
-            else:
-                dummy_names[f"C({var})[T.{val}]"] = f"{var}_{val}"
-
 # Add formula to document
 doc.add_paragraph(f"Model formula: {formula}")
 
@@ -331,11 +300,6 @@ try:
     irr_conf = np.exp(nb_results.conf_int())
     irr_df = pd.DataFrame({'IRR': irr, 'Lower CI': irr_conf[0], 'Upper CI': irr_conf[1], 
                           'P-value': nb_results.pvalues})
-    
-    print("\nParameter names before labeling:")
-    print(nb_results.params.index)
-
-    irr_df.index = [dummy_names.get(idx, idx) for idx in irr_df.index]
     print(irr_df)
     
     # Add IRR table to document
@@ -407,8 +371,7 @@ try:
     doc.add_heading('Approximated Multilevel Model', level=1)
     doc.add_paragraph('Using MixedLM to approximate a multilevel model with random effects for states.')
     
-    
-    
+    # Check if us_state variable exists for multilevel modeling
     if 'us_state_enc' in df_clean.columns:
         # For demonstration, we'll use a linear mixed model as an approximation
         # Prepare model variables
@@ -420,21 +383,19 @@ try:
             if var in df_clean.columns:
                 X_vars.append(var)
         
-        model_data = df_clean.dropna(subset=[*X_vars, 'los_capped', 'us_state_enc'])
-        y = model_data['los_capped']
-        X = model_data[X_vars].copy()
+        X = df_clean[X_vars].copy()
         
         # Add categorical variables (one-hot encoded)
         for var in categorical_model_vars:
-            if var in model_data.columns and var != 'us_state_enc':  # Exclude the grouping variable
-                dummies = pd.get_dummies(model_data[var], prefix=var, drop_first=True)
+            if var in df_clean.columns and var != 'us_state_enc':  # Exclude the grouping variable
+                dummies = pd.get_dummies(df_clean[var], prefix=var, drop_first=True)
                 X = pd.concat([X, dummies], axis=1)
         
         # Add intercept
         X = sm.add_constant(X)
         
         # Define groups for random effects
-        groups =model_data['us_state_enc']
+        groups = df_clean['us_state_enc']
         
         # Fit mixed effects model
         mixed_model = MixedLM(y, X, groups)
