@@ -276,6 +276,16 @@ for var in categorical_model_vars:
 formula = 'los_capped ~ ' + ' + '.join(formula_parts)
 print(f"Model formula: {formula}")
 
+dummy_names = {}
+for var in categorical_model_vars:
+    if var in df_clean.columns:
+        values = df_clean[var].unique()
+        for val in values:
+            if var == 'purpose_simple':
+                dummy_names[f"{var}[T.{val}]"] = f"{var}_{purpose_labels.get(val, 'Unknown')}"
+            else:
+                dummy_names[f"{var}[T.{val}]"] = f"{var}_{val}"
+
 # Add formula to document
 doc.add_paragraph(f"Model formula: {formula}")
 
@@ -301,6 +311,8 @@ try:
     irr_conf = np.exp(nb_results.conf_int())
     irr_df = pd.DataFrame({'IRR': irr, 'Lower CI': irr_conf[0], 'Upper CI': irr_conf[1], 
                           'P-value': nb_results.pvalues})
+    
+    irr_df.index = [dummy_names.get(idx, idx) for idx in irr_df.index]
     print(irr_df)
     
     # Add IRR table to document
