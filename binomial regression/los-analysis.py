@@ -276,15 +276,35 @@ for var in categorical_model_vars:
 formula = 'los_capped ~ ' + ' + '.join(formula_parts)
 print(f"Model formula: {formula}")
 
+# Create a dictionary to map encoded values to their labels
+sex_labels = {0: 'Male', 1: 'Female', 2: 'Other'}
+marital_labels = {0: 'Single', 1: 'Married', 2: 'Divorced', 3: 'Widowed'}
+employment_labels = {0: 'Employed', 1: 'Self-employed', 2: 'Unemployed', 3: 'Retired'}
+accomd_labels = {0: 'Hotel', 1: 'Airbnb', 2: 'Private_Residence'}
+
+# Create more descriptive dummy_names
 dummy_names = {}
+# Purpose mapping already exists
 for var in categorical_model_vars:
     if var in df_clean.columns:
-        values = df_clean[var].unique()
+        values = sorted(df_clean[var].unique())
         for val in values:
             if var == 'purpose_simple':
-                dummy_names[f"{var}[T.{val}]"] = f"{var}_{purpose_labels.get(val, 'Unknown')}"
+                dummy_names[f"C({var})[T.{val}]"] = f"Purpose_{purpose_labels.get(val, val)}"
+            elif var == 'sex_enc':
+                dummy_names[f"C({var})[T.{val}]"] = f"Sex_{sex_labels.get(val, val)}"
+            elif var == 'marital_status_enc':
+                dummy_names[f"C({var})[T.{val}]"] = f"MaritalStatus_{marital_labels.get(val, val)}"
+            elif var == 'employment_status_enc':
+                dummy_names[f"C({var})[T.{val}]"] = f"Employment_{employment_labels.get(val, val)}"
+            elif var == 'accomd_type_enc':
+                dummy_names[f"C({var})[T.{val}]"] = f"Accommodation_{accomd_labels.get(val, val)}"
+            elif var == 'month_travel':
+                month_names = {1:'Jan', 2:'Feb', 3:'Mar', 4:'Apr', 5:'May', 6:'Jun', 
+                              7:'Jul', 8:'Aug', 9:'Sep', 10:'Oct', 11:'Nov', 12:'Dec'}
+                dummy_names[f"C({var})[T.{val}]"] = f"Month_{month_names.get(val, val)}"
             else:
-                dummy_names[f"{var}[T.{val}]"] = f"{var}_{val}"
+                dummy_names[f"C({var})[T.{val}]"] = f"{var}_{val}"
 
 # Add formula to document
 doc.add_paragraph(f"Model formula: {formula}")
@@ -312,6 +332,9 @@ try:
     irr_df = pd.DataFrame({'IRR': irr, 'Lower CI': irr_conf[0], 'Upper CI': irr_conf[1], 
                           'P-value': nb_results.pvalues})
     
+    print("\nParameter names before labeling:")
+    print(nb_results.params.index)
+
     irr_df.index = [dummy_names.get(idx, idx) for idx in irr_df.index]
     print(irr_df)
     
@@ -403,8 +426,8 @@ try:
         
         # Add categorical variables (one-hot encoded)
         for var in categorical_model_vars:
-            if var in df_clean.columns and var != 'us_state_enc':  # Exclude the grouping variable
-                dummies = pd.get_dummies(df_clean[var], prefix=var, drop_first=True)
+            if var in model_data.columns and var != 'us_state_enc':  # Exclude the grouping variable
+                dummies = pd.get_dummies(model_data[var], prefix=var, drop_first=True)
                 X = pd.concat([X, dummies], axis=1)
         
         # Add intercept
