@@ -101,11 +101,9 @@ cat(
 )
 
 # Check for truncation point - assuming truncation at 0 (left truncation)
-# For right truncation, you would specify the upper bound
 cat("\nFitting multilevel truncated negative binomial regression model...\n")
 
 # Fit the multilevel truncated negative binomial model using glmmTMB
-# The truncated family in glmmTMB handles zero-truncated distributions
 trunc_nb_model <- glmmTMB(
   formula = as.formula(formula_string),
   data = df_clean_nb,
@@ -140,28 +138,34 @@ irr_results <- data.frame(
 print(irr_results)
 
 # Extract random effects variance components
+has_random_effects <- FALSE
 if ("us_state_enc" %in% names(df)) {
   cat("\nRandom Effects Variance Components:\n")
   random_effects <- VarCorr(trunc_nb_model)
   print(random_effects)
-
-  #Calculate Intraclass Correlation Coefficient (ICC)
-  state_var <- as.numeric(random_effects$us_state_enc[1])
-  # For negative binomial, the residual variance is not directly available
-  # We'll use the dispersion parameter
-  dispersion <- sigma(trunc_nb_model) ^ 2
-  icc <- state_var / (state_var + dispersion + (pi ^ 2) / 3)
-  # Approximation for count models
-  cat(paste(
-    "Intraclass Correlation Coefficient (ICC):",
-    round(icc, 4), "\n"
-  ))
+  
+  # Check if us_state_enc random effect exists and has valid variance
+  if (!is.null(random_effects$us_state_enc) && length(random_effects$us_state_enc) > 0) {
+    state_var <- as.numeric(random_effects$us_state_enc[1])
+    if (!is.na(state_var) && state_var >= 0) {
+      has_random_effects <- TRUE
+      # Calculate Intraclass Correlation Coefficient (ICC)
+      dispersion <- sigma(trunc_nb_model) ^ 2
+      icc <- state_var / (state_var + dispersion + (pi ^ 2) / 3)
+      cat(paste(
+        "Intraclass Correlation Coefficient (ICC):",
+        round(icc, 4), "\n"
+      ))
+    } else {
+      cat("Warning: Invalid or zero variance for us_state_enc random effect.\n")
+    }
+  } else {
+    cat("Warning: No random effect variance estimated for us_state_enc.\n")
+  }
 }
 
 # Model diagnostics
 cat("\nModel Diagnostics:\n")
-
-# DHARMa residuals for GLMMs
 simulation_output <- simulateResiduals(
   fittedModel = trunc_nb_model, plot = FALSE
 )
@@ -183,7 +187,7 @@ cat(paste("Log-likelihood:", round(logLik(trunc_nb_model), 2), "\n"))
 # Check for overdispersion
 check_overdispersion(trunc_nb_model)
 
-# Compare with non-truncated model (if desired)
+# Compare with non-truncated model
 cat("\nFitting comparison model without truncation...\n")
 comparison_formula <- gsub("\\+ \\(1\\|us_state_enc\\)", "", formula_string)
 comparison_formula <- paste(comparison_formula, "+ (1|us_state_enc)")
@@ -215,12 +219,12 @@ ggplot(df_clean_nb, aes(x = predicted_truncated, y = los_capped)) +
 results_list <- list(
   model_summary = summary(trunc_nb_model),
   irr_results = irr_results,
-  random_effects = if ("us_state_enc" %in% names(df)) {
+  random_effects = if (has_random_effects) {
     VarCorr(trunc_nb_model)
   } else {
     NULL
   },
-  icc = if ("us_state_enc" %in% names(df)) icc else NULL,
+  icc = if (has_random_effects) icc else NULL,
   fit_statistics = data.frame(
     AIC = AIC(trunc_nb_model),
     BIC = BIC(trunc_nb_model),
@@ -259,7 +263,7 @@ if (tolower(save_choice) == "y") {
 
     # Add title
     doc <- doc %>%
-      body_add_par("Multilevel Truncated Negative", style = "heading 1")
+      body_add_par("Multilevel Truncated Negative Binomial Model Results", style = "heading 1")
 
     # Add Fixed Effects table
     doc <- doc %>%
@@ -280,7 +284,7 @@ if (tolower(save_choice) == "y") {
 
     # Add IRR table
     doc <- doc %>%
-      body_add_par("(IRR) for Fixed Effects", style = "heading 2")
+      body_add_par("Incident Rate Ratios (IRR) for Fixed Effects", style = "heading 2")
     irr_ft <- flextable(irr_results) %>%
       set_header_labels(
         Variable = "Variable",
@@ -293,20 +297,28 @@ if (tolower(save_choice) == "y") {
     doc <- doc %>% body_add_flextable(irr_ft)
 
     # Add Random Effects (if applicable)
-    if ("us_state_enc" %in% names(df)) {
+    if (has_random_effects) {
       doc <- doc %>%
         body_add_par("Random Effects Variance Components", style = "heading 2")
       random_effects_df <- data.frame(
         Group = "us_state_enc",
-        Variance = as.numeric(random_effects$us_state_enc[1]),
-        StdDev = sqrt(as.numeric(random_effects$us_state_enc[1]))
+        Variance = state_var,
+        StdDev = sqrt(state_var)
       )
       random_effects_ft <- flextable(random_effects_df) %>%
         autofit()
       doc <- doc %>% body_add_flextable(random_effects_ft)
+      
       doc <- doc %>%
         body_add_par(
           paste("Intraclass Correlation Coefficient (ICC):", round(icc, 4)),
+          style = "Normal"
+        )
+    } else {
+      doc <- doc %>%
+        body_add_par("Random Effects Variance Components", style = "heading 2") %>%
+        body_add_par(
+          "No random effect variance estimated for us_state_enc.",
           style = "Normal"
         )
     }
@@ -327,7 +339,7 @@ if (tolower(save_choice) == "y") {
     doc <- doc %>% body_add_flextable(fit_stats_ft)
 
     # Save Word document
-    word_output <- paste0(tools::file_path_sans_ext(output_file), "_r.docx")
+    word_output <- paste0(tools::file_path_sans_ext(output_file), "_results.docx")
     print(doc, target = word_output)
 
     cat(paste("Results saved to:", output_file, "\n"))
