@@ -6,6 +6,8 @@ library(broom.mixed)
 library(performance)
 library(DHARMa)
 library(ggplot2)
+library(officer)
+library(flextable)
 
 # Function to allow user to select input file
 select_file <- function(title = "Select Excel Data File") {
@@ -25,7 +27,7 @@ if (is.null(file_path) || file_path == "") {
 # Import the data
 cat(paste("Loading data from:", file_path, "\n"))
 df <- read_excel(file_path, sheet = "Sheet")
-17
+
 # Define continuous and categorical variables following your naming convention
 continuous_vars <- c(
   "import_from_slu_log", "age",
@@ -154,12 +156,6 @@ if ("us_state_enc" %in% names(df)) {
     "Intraclass Correlation Coefficient (ICC):",
     round(icc, 4), "\n"
   ))
-
-  #DHARMa residuals for GLMMs
-  simulation_output <- simulateResiduals(
-    fittedModel = trunc_nb_model,
-    plot = FALSE
-  )
 }
 
 # Model diagnostics
@@ -239,6 +235,7 @@ save_choice <- readline()
 if (tolower(save_choice) == "y") {
   output_file <- file.choose(new = TRUE)
   if (!is.null(output_file) && output_file != "") {
+    # Save RDS file
     saveRDS(
       results_list,
       file = paste0(
@@ -247,7 +244,7 @@ if (tolower(save_choice) == "y") {
       )
     )
 
-    # Also save as CSV for easy viewing
+    # Save IRR as CSV
     write.csv(
       irr_results,
       file = paste0(
@@ -257,7 +254,84 @@ if (tolower(save_choice) == "y") {
       row.names = FALSE
     )
 
+    # Create Word document
+    doc <- read_docx()
+
+    # Add title
+    doc <- doc %>%
+      body_add_par("Multilevel Truncated Negative", style = "heading 1")
+
+    # Add Fixed Effects table
+    doc <- doc %>%
+      body_add_par("Fixed Effects Coefficients", style = "heading 2")
+    fixed_effects_df <- as.data.frame(fixed_effects_summary)
+    fixed_effects_df <- round(fixed_effects_df, 4)
+    fixed_effects_df$Variable <- rownames(fixed_effects_summary)
+    fixed_effects_ft <- flextable(fixed_effects_df) %>%
+      set_header_labels(
+        Variable = "Variable",
+        Estimate = "Estimate",
+        `Std. Error` = "Std. Error",
+        `z value` = "z value",
+        `Pr(>|z|)` = "P-value"
+      ) %>%
+      autofit()
+    doc <- doc %>% body_add_flextable(fixed_effects_ft)
+
+    # Add IRR table
+    doc <- doc %>%
+      body_add_par("(IRR) for Fixed Effects", style = "heading 2")
+    irr_ft <- flextable(irr_results) %>%
+      set_header_labels(
+        Variable = "Variable",
+        IRR = "IRR",
+        Lower_CI = "Lower CI",
+        Upper_CI = "Upper CI",
+        P_value = "P-value"
+      ) %>%
+      autofit()
+    doc <- doc %>% body_add_flextable(irr_ft)
+
+    # Add Random Effects (if applicable)
+    if ("us_state_enc" %in% names(df)) {
+      doc <- doc %>%
+        body_add_par("Random Effects Variance Components", style = "heading 2")
+      random_effects_df <- data.frame(
+        Group = "us_state_enc",
+        Variance = as.numeric(random_effects$us_state_enc[1]),
+        StdDev = sqrt(as.numeric(random_effects$us_state_enc[1]))
+      )
+      random_effects_ft <- flextable(random_effects_df) %>%
+        autofit()
+      doc <- doc %>% body_add_flextable(random_effects_ft)
+      doc <- doc %>%
+        body_add_par(
+          paste("Intraclass Correlation Coefficient (ICC):", round(icc, 4)),
+          style = "Normal"
+        )
+    }
+
+    # Add Model Fit Statistics
+    doc <- doc %>%
+      body_add_par("Model Fit Statistics", style = "heading 2")
+    fit_stats_df <- data.frame(
+      Statistic = c("AIC", "BIC", "Log-likelihood"),
+      Value = round(c(
+        AIC(trunc_nb_model),
+        BIC(trunc_nb_model),
+        as.numeric(logLik(trunc_nb_model))
+      ), 2)
+    )
+    fit_stats_ft <- flextable(fit_stats_df) %>%
+      autofit()
+    doc <- doc %>% body_add_flextable(fit_stats_ft)
+
+    # Save Word document
+    word_output <- paste0(tools::file_path_sans_ext(output_file), "_r.docx")
+    print(doc, target = word_output)
+
     cat(paste("Results saved to:", output_file, "\n"))
+    cat(paste("Word document saved to:", word_output, "\n"))
   }
 }
 
