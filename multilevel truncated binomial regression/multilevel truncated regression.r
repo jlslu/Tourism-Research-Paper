@@ -133,7 +133,7 @@ irr_results <- data.frame(
     fixed_effects_summary[, "Estimate"] +
       1.96 * fixed_effects_summary[, "Std. Error"]
   ),
-  P_value = fixed_effects_summary[, `Pr(>|z|)`]
+  P_value = fixed_effects_summary[, "Pr(>|z|)"]
 )
 print(irr_results)
 
