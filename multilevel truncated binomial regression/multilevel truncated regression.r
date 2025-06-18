@@ -28,7 +28,7 @@ df <- read_excel(file_path, sheet = "Sheet")
 17
 # Define continuous and categorical variables following your naming convention
 continuous_vars <- c(
-  "immigrant_population_log", "import_from_slu_log", "age",
+  "import_from_slu_log", "age",
   "distance_miles_log", "state_percapita_income_log",
   "state_unemployment", "immigrant_density"
 )
@@ -172,10 +172,10 @@ simulation_output <- simulateResiduals(
 
 # Plot residuals
 par(mfrow = c(2, 2))
-plot(simulationOutput, main = "DHARMa Residuals")
+plot(simulation_output, main = "DHARMa Residuals")
 
 # Additional diagnostic plots
-plotResiduals(simulationOutput, form = df_clean_nb$us_state_enc, 
+plotResiduals(simulation_output, form = df_clean_nb$us_state_enc,
               main = "Residuals by State")
 
 # Model fit statistics
