@@ -33,14 +33,14 @@ df <- read_excel(file_path, sheet = "Sheet")
 # Define continuous and categorical variables
 continuous_vars <- c(
   "import_from_slu_log", "age",
-  "distance_miles_log", "state_percapita_income_log",
+  "distance_miles_log", 
   "state_unemployment", "immigrant_density"
 )
 
 categorical_model_vars <- c(
   "sex_enc", "marital_status_enc", "employment_status_enc",
   "purpose_simple", "accomd_type_enc", "season_enc",
-  "us_state_enc", "tourist_type_enc"
+  "region_census", "tourist_type_enc","region_climate"
 )
 
 # Ensure all continuous variables are numeric
@@ -65,16 +65,16 @@ existing_categorical <- categorical_model_vars[cat_vars_in_df]
 formula_parts <- c(existing_continuous, existing_categorical)
 formula_string <- paste("los_capped ~", paste(formula_parts, collapse = " + "))
 
-# Add random effect for us_state_enc
-if ("us_state_enc" %in% names(df)) {
-  fixed_effects <- formula_parts[formula_parts != "us_state_enc"]
+# Add random effect for region_census
+if ("region_census" %in% names(df)) {
+  fixed_effects <- formula_parts[formula_parts != "region_census"]
   formula_string <- paste(
     "los_capped ~",
     paste(fixed_effects, collapse = " + "),
-    "+ (1|us_state_enc)"
+    "+ (1|region_census)"
   )
 } else {
-  cat("Warning: us_state_enc not found in data. Running model without random effects.\n")
+  cat("Warning: region_census not found in data. Running model without random effects.\n")
 }
 
 cat(paste("Model formula:", formula_string, "\n"))
@@ -117,23 +117,23 @@ print(irr_results)
 
 # Extract random effects
 has_random_effects <- FALSE
-if ("us_state_enc" %in% names(df)) {
+if ("region_census" %in% names(df)) {
   cat("\nRandom Effects Variance Components:\n")
   random_effects <- VarCorr(trunc_nb_model)
   print(random_effects)
   
-  if (!is.null(random_effects$us_state_enc) && length(random_effects$us_state_enc) > 0) {
-    state_var <- as.numeric(random_effects$us_state_enc[1])
+  if (!is.null(random_effects$region_census) && length(random_effects$region_census) > 0) {
+    state_var <- as.numeric(random_effects$region_census[1])
     if (!is.na(state_var) && state_var >= 0) {
       has_random_effects <- TRUE
       dispersion <- sigma(trunc_nb_model) ^ 2
       icc <- state_var / (state_var + dispersion + (pi ^ 2) / 3)
       cat(paste("Intraclass Correlation Coefficient (ICC):", round(icc, 4), "\n"))
     } else {
-      cat("Warning: Invalid or zero variance for us_state_enc random effect.\n")
+      cat("Warning: Invalid or zero variance for region_census random effect.\n")
     }
   } else {
-    cat("Warning: No random effect variance estimated for us_state_enc.\n")
+    cat("Warning: No random effect variance estimated for region_census.\n")
   }
 }
 
@@ -151,7 +151,7 @@ dev.off()
 
 residuals_by_state_file <- file.path(temp_dir, "residuals_by_state.png")
 png(residuals_by_state_file, width = 800, height = 600)
-plotResiduals(simulation_output, form = df_clean_nb$us_state_enc, main = "Residuals by State")
+plotResiduals(simulation_output, form = df_clean_nb$region_census, main = "Residuals by State")
 dev.off()
 
 # Model fit statistics
@@ -165,8 +165,8 @@ check_overdispersion(trunc_nb_model)
 
 # Fit comparison model without truncation
 cat("\nFitting comparison model without truncation...\n")
-comparison_formula <- gsub("\\+ \\(1\\|us_state_enc\\)", "", formula_string)
-comparison_formula <- paste(comparison_formula, "+ (1|us_state_enc)")
+comparison_formula <- gsub("\\+ \\(1\\|region_census\\)", "", formula_string)
+comparison_formula <- paste(comparison_formula, "+ (1|region_census)")
 nb_model_comparison <- glmmTMB(
   formula = as.formula(comparison_formula),
   data = df_clean_nb,
@@ -183,7 +183,7 @@ print(anova_results)
 # Compute VIF
 cat("\nComputing Variance Inflation Factor (VIF):\n")
 # Fit a glm.nb model for VIF calculation (no random effects)
-fixed_formula <- paste("los_capped ~", paste(formula_parts[formula_parts != "us_state_enc"], collapse = " + "))
+fixed_formula <- paste("los_capped ~", paste(formula_parts[formula_parts != "region_census"], collapse = " + "))
 vif_model <- tryCatch(
   glm.nb(as.formula(fixed_formula), data = df_clean_nb),
   error = function(e) {
@@ -325,7 +325,7 @@ if (tolower(save_choice) == "y") {
     if (has_random_effects) {
       doc <- doc %>% body_add_par("Random Effects Variance Components", style = "heading 2")
       random_effects_df <- data.frame(
-        Group = "us_state_enc",
+        Group = "region_census",
         Variance = state_var,
         StdDev = sqrt(state_var)
       )
@@ -335,7 +335,7 @@ if (tolower(save_choice) == "y") {
       doc <- doc %>% body_add_par(paste("Intraclass Correlation Coefficient (ICC):", round(icc, 4)), style = "Normal")
     } else {
       doc <- doc %>% body_add_par("Random Effects Variance Components", style = "heading 2") %>%
-        body_add_par("No random effect variance estimated for us_state_enc.", style = "Normal")
+        body_add_par("No random effect variance estimated for region_census.", style = "Normal")
     }
 
     # Add VIF table
