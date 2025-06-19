@@ -260,6 +260,9 @@ results_list <- list(
   anova_results = anova_results
 )
 
+r2_results <- r2(trunc_nb_model)
+print(r2_results)
+
 # Ask user where to save results
 cat("\nWould you like to save the results? (y/n): ")
 save_choice <- readline()
