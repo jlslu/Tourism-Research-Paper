@@ -30,6 +30,13 @@ if (is.null(file_path) || file_path == "") {
 cat(paste("Loading data from:", file_path, "\n"))
 df <- read_excel(file_path, sheet = "Sheet")
 
+#filter out rows where region_climate is NA
+if ("region_climate" %in% names(df)) {
+  df <- df %>% filter(!is.na(region_climate))
+} else {
+  cat("Warning: 'region_climate' column not found in data. Proceeding without filtering.\n")
+}
+
 # Define continuous and categorical variables
 continuous_vars <- c(
   "import_from_slu_log", "age",
@@ -65,16 +72,16 @@ existing_categorical <- categorical_model_vars[cat_vars_in_df]
 formula_parts <- c(existing_continuous, existing_categorical)
 formula_string <- paste("los_capped ~", paste(formula_parts, collapse = " + "))
 
-# Add random effect for region_census
-if ("region_census" %in% names(df)) {
-  fixed_effects <- formula_parts[formula_parts != "region_census"]
+# Add random effect for region_climate
+if ("region_climate" %in% names(df)) {
+  fixed_effects <- formula_parts[formula_parts != "region_climate"]
   formula_string <- paste(
     "los_capped ~",
     paste(fixed_effects, collapse = " + "),
-    "+ (1|region_census)"
+    "+ (1|region_climate)"
   )
 } else {
-  cat("Warning: region_census not found in data. Running model without random effects.\n")
+  cat("Warning: region_climate not found in data. Running model without random effects.\n")
 }
 
 cat(paste("Model formula:", formula_string, "\n"))
@@ -117,23 +124,23 @@ print(irr_results)
 
 # Extract random effects
 has_random_effects <- FALSE
-if ("region_census" %in% names(df)) {
+if ("region_climate" %in% names(df)) {
   cat("\nRandom Effects Variance Components:\n")
   random_effects <- VarCorr(trunc_nb_model)
   print(random_effects)
   
-  if (!is.null(random_effects$region_census) && length(random_effects$region_census) > 0) {
-    state_var <- as.numeric(random_effects$region_census[1])
+  if (!is.null(random_effects$region_climate) && length(random_effects$region_climate) > 0) {
+    state_var <- as.numeric(random_effects$region_climate[1])
     if (!is.na(state_var) && state_var >= 0) {
       has_random_effects <- TRUE
       dispersion <- sigma(trunc_nb_model) ^ 2
       icc <- state_var / (state_var + dispersion + (pi ^ 2) / 3)
       cat(paste("Intraclass Correlation Coefficient (ICC):", round(icc, 4), "\n"))
     } else {
-      cat("Warning: Invalid or zero variance for region_census random effect.\n")
+      cat("Warning: Invalid or zero variance for region_climate random effect.\n")
     }
   } else {
-    cat("Warning: No random effect variance estimated for region_census.\n")
+    cat("Warning: No random effect variance estimated for region_climate.\n")
   }
 }
 
@@ -151,7 +158,7 @@ dev.off()
 
 residuals_by_state_file <- file.path(temp_dir, "residuals_by_state.png")
 png(residuals_by_state_file, width = 800, height = 600)
-plotResiduals(simulation_output, form = df_clean_nb$region_census, main = "Residuals by State")
+plotResiduals(simulation_output, form = df_clean_nb$region_climate, main = "Residuals by State")
 dev.off()
 
 # Model fit statistics
@@ -165,8 +172,8 @@ check_overdispersion(trunc_nb_model)
 
 # Fit comparison model without truncation
 cat("\nFitting comparison model without truncation...\n")
-comparison_formula <- gsub("\\+ \\(1\\|region_census\\)", "", formula_string)
-comparison_formula <- paste(comparison_formula, "+ (1|region_census)")
+comparison_formula <- gsub("\\+ \\(1\\|region_climate\\)", "", formula_string)
+comparison_formula <- paste(comparison_formula, "+ (1|region_climate)")
 nb_model_comparison <- glmmTMB(
   formula = as.formula(comparison_formula),
   data = df_clean_nb,
@@ -183,7 +190,7 @@ print(anova_results)
 # Compute VIF
 cat("\nComputing Variance Inflation Factor (VIF):\n")
 # Fit a glm.nb model for VIF calculation (no random effects)
-fixed_formula <- paste("los_capped ~", paste(formula_parts[formula_parts != "region_census"], collapse = " + "))
+fixed_formula <- paste("los_capped ~", paste(formula_parts[formula_parts != "region_climate"], collapse = " + "))
 vif_model <- tryCatch(
   glm.nb(as.formula(fixed_formula), data = df_clean_nb),
   error = function(e) {
@@ -328,7 +335,7 @@ if (tolower(save_choice) == "y") {
     if (has_random_effects) {
       doc <- doc %>% body_add_par("Random Effects Variance Components", style = "heading 2")
       random_effects_df <- data.frame(
-        Group = "region_census",
+        Group = "region_climate",
         Variance = state_var,
         StdDev = sqrt(state_var)
       )
@@ -338,7 +345,7 @@ if (tolower(save_choice) == "y") {
       doc <- doc %>% body_add_par(paste("Intraclass Correlation Coefficient (ICC):", round(icc, 4)), style = "Normal")
     } else {
       doc <- doc %>% body_add_par("Random Effects Variance Components", style = "heading 2") %>%
-        body_add_par("No random effect variance estimated for region_census.", style = "Normal")
+        body_add_par("No random effect variance estimated for region_climate.", style = "Normal")
     }
 
     # Add VIF table
