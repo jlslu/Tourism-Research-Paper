@@ -41,7 +41,7 @@ if ("us_state_enc" %in% names(df)) {
 continuous_vars <- c(
   "import_from_slu_log", "age",
   "distance_miles_log", 
-  "state_unemployment", "immigrant_density","state_percapita_income_log","economic_distance","climate_distance"
+  "state_unemployment", "immigrant_density","state_percapita_income_log","climate_distance"
 )
 
 categorical_model_vars <- c(
