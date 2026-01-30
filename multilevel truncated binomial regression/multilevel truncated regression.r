@@ -142,6 +142,26 @@ if ("us_state_enc" %in% names(df)) {
   } else {
     cat("Warning: No random effect variance estimated for us_state_enc.\n")
   }
+
+  # Extract and print random-effect BLUPs (conditional modes)
+  if (has_random_effects) {
+    re_list <- tryCatch(ranef(trunc_nb_model), error = function(e) NULL)
+    if (!is.null(re_list) && !is.null(re_list$cond$us_state_enc)) {
+      re_df <- as.data.frame(re_list$cond$us_state_enc)
+      # Ensure a column for state identifier
+      re_df$us_state_enc <- rownames(re_list$cond$us_state_enc)
+      # Reorder columns to put state first
+      re_df <- re_df[, c("us_state_enc", setdiff(names(re_df), "us_state_enc"))]
+      rownames(re_df) <- NULL
+      cat("\nRandom Effects (BLUPs) for us_state_enc:\n")
+      print(head(re_df, n = 20))
+    } else {
+      cat("Warning: Unable to extract conditional random effects (ranef returned NULL).\n")
+      re_df <- NULL
+    }
+  } else {
+    re_df <- NULL
+  }
 }
 
 # Model diagnostics
@@ -270,6 +290,10 @@ results_list <- list(
 r2_results <- r2(trunc_nb_model)
 print(r2_results)
 
+# Add random-effect BLUPs and R2 to results_list for saving
+results_list$random_effects_values <- if (exists("re_df")) re_df else NULL
+results_list$r2_results <- r2_results
+
 # Ask user where to save results
 cat("\nWould you like to save the results? (y/n): ")
 save_choice <- readline()
@@ -343,9 +367,32 @@ if (tolower(save_choice) == "y") {
         autofit()
       doc <- doc %>% body_add_flextable(random_effects_ft)
       doc <- doc %>% body_add_par(paste("Intraclass Correlation Coefficient (ICC):", round(icc, 4)), style = "Normal")
+      # Add detailed random-effect BLUPs table if available
+      if (exists("re_df") && !is.null(re_df)) {
+        doc <- doc %>% body_add_par("Random Effects (BLUPs) by State", style = "heading 3")
+        re_df_print <- re_df
+        # Round numeric columns for presentation
+        num_cols <- sapply(re_df_print, is.numeric)
+        if (any(num_cols)) re_df_print[num_cols] <- lapply(re_df_print[num_cols], function(x) round(x, 4))
+        re_ft <- flextable(re_df_print) %>% autofit()
+        doc <- doc %>% body_add_flextable(re_ft)
+      } else {
+        doc <- doc %>% body_add_par("No conditional random effects available.", style = "Normal")
+      }
     } else {
       doc <- doc %>% body_add_par("Random Effects Variance Components", style = "heading 2") %>%
         body_add_par("No random effect variance estimated for us_state_enc.", style = "Normal")
+    }
+
+    # Add R-squared (marginal and conditional)
+    doc <- doc %>% body_add_par("Model R-squared (Marginal and Conditional)", style = "heading 2")
+    if (!is.null(results_list$r2_results)) {
+      r2_vals <- results_list$r2_results
+      r2_df <- data.frame(Statistic = names(r2_vals), Value = round(as.numeric(unlist(r2_vals)), 4))
+      r2_ft <- flextable(r2_df) %>% autofit()
+      doc <- doc %>% body_add_flextable(r2_ft)
+    } else {
+      doc <- doc %>% body_add_par("R2 results unavailable.", style = "Normal")
     }
 
     # Add VIF table
