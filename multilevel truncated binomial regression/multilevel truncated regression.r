@@ -88,9 +88,15 @@ if ("climate_distance" %in% names(df)) {
     # Ensure immigrant_density is numeric
     df$immigrant_density <- as.numeric(df$immigrant_density)
 
-    # Create interaction terms between climate dummies and immigrant_density
-    df$immigrant_similar <- df$similar * df$immigrant_density
-    df$immigrant_moderate <- df$moderate * df$immigrant_density
+    # Mean-center immigrant_density to reduce multicollinearity with interaction terms
+    immigrant_density_mean <- mean(df$immigrant_density, na.rm = TRUE)
+    df$immigrant_density_centered <- df$immigrant_density - immigrant_density_mean
+
+    cat(paste("Mean-centering immigrant_density (mean =", round(immigrant_density_mean, 6), ")\n"))
+
+    # Create interaction terms using CENTERED immigrant_density
+    df$immigrant_similar <- df$similar * df$immigrant_density_centered
+    df$immigrant_moderate <- df$moderate * df$immigrant_density_centered
 
     cat(paste("\nClimate distance bins created:\n"))
     cat(paste("  Similar:", sum(df$climate_bin == "similar", na.rm = TRUE), "observations\n"))
@@ -101,6 +107,8 @@ if ("climate_distance" %in% names(df)) {
       cat(paste("  ", labels[i], ":", round(breaks[i], 4), "to", round(breaks[i+1], 4), "\n"))
     }
     cat("\nInteraction terms created: immigrant_similar, immigrant_moderate\n")
+    cat("Note: Interactions use CENTERED immigrant_density to reduce multicollinearity\n")
+    cat(paste("      Main effect in model is immigrant_density_centered (mean =", round(immigrant_density_mean, 6), ")\n"))
   } else {
     cat("Warning: 'immigrant_density' not found. Cannot create interaction terms.\n")
   }
@@ -112,7 +120,7 @@ if ("climate_distance" %in% names(df)) {
 continuous_vars <- c(
   "import_from_slu_log", "age",
   "distance_miles_log",
-  "immigrant_density","state_percapita_income_log",
+  "immigrant_density_centered","state_percapita_income_log",
   "immigrant_similar", "immigrant_moderate"
 )
 
