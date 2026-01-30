@@ -37,16 +37,88 @@ if ("us_state_enc" %in% names(df)) {
   cat("Warning: 'us_state_enc' column not found in data. Proceeding without filtering.\n")
 }
 
+# ============================================================================
+# Create climate_distance bins and interaction terms with immigrant_density
+# ============================================================================
+cat("\nCreating climate distance bins and interaction terms...\n")
+
+if ("climate_distance" %in% names(df)) {
+  # Ensure climate_distance is numeric
+  df$climate_distance <- as.numeric(df$climate_distance)
+
+  # Check for valid values
+  cat(paste("Climate distance range:", min(df$climate_distance, na.rm = TRUE), "to",
+            max(df$climate_distance, na.rm = TRUE), "\n"))
+
+  # Calculate quantiles to create balanced bins
+  quantiles <- quantile(df$climate_distance, probs = c(0, 0.25, 0.5, 0.75, 1.0), na.rm = TRUE)
+  cat(paste("Quantiles for balanced bins:\n"))
+  cat(paste("  25%:", round(quantiles[2], 4), "\n"))
+  cat(paste("  50%:", round(quantiles[3], 4), "\n"))
+  cat(paste("  75%:", round(quantiles[4], 4), "\n"))
+
+  # Check if quantiles are unique (data may be skewed with duplicate values)
+  unique_quantiles <- unique(quantiles)
+
+  # Get min and max values
+  min_val <- min(df$climate_distance, na.rm = TRUE)
+  max_val <- max(df$climate_distance, na.rm = TRUE)
+
+  # Create 3 bins with breaks at 0.15 and 0.25
+  # Similar: min-0.15, Moderate: 0.15-0.25, Different: 0.25-max (reference)
+  breaks <- c(min_val, 0.15, 0.25, max_val)
+  labels <- c("similar", "moderate", "different")
+
+  cat(paste("Using 3-bin approach with custom breaks:", paste(round(breaks, 4), collapse = ", "), "\n"))
+
+  # Create bins
+  df$climate_bin <- cut(df$climate_distance,
+                        breaks = breaks,
+                        labels = labels,
+                        include.lowest = TRUE,
+                        right = FALSE)
+
+  # Create dummy variables (excluding "different" as reference category)
+  df$similar <- ifelse(df$climate_bin == "similar", 1, 0)
+  df$moderate <- ifelse(df$climate_bin == "moderate", 1, 0)
+  # Note: "different" is the reference category (both dummies = 0)
+
+  # Check if immigrant_density exists
+  if ("immigrant_density" %in% names(df)) {
+    # Ensure immigrant_density is numeric
+    df$immigrant_density <- as.numeric(df$immigrant_density)
+
+    # Create interaction terms between climate dummies and immigrant_density
+    df$immigrant_similar <- df$similar * df$immigrant_density
+    df$immigrant_moderate <- df$moderate * df$immigrant_density
+
+    cat(paste("\nClimate distance bins created:\n"))
+    cat(paste("  Similar:", sum(df$climate_bin == "similar", na.rm = TRUE), "observations\n"))
+    cat(paste("  Moderate:", sum(df$climate_bin == "moderate", na.rm = TRUE), "observations\n"))
+    cat(paste("  Different:", sum(df$climate_bin == "different", na.rm = TRUE), "observations (reference)\n"))
+    cat(paste("\nBin ranges:\n"))
+    for (i in 1:(length(breaks)-1)) {
+      cat(paste("  ", labels[i], ":", round(breaks[i], 4), "to", round(breaks[i+1], 4), "\n"))
+    }
+    cat("\nInteraction terms created: immigrant_similar, immigrant_moderate\n")
+  } else {
+    cat("Warning: 'immigrant_density' not found. Cannot create interaction terms.\n")
+  }
+} else {
+  cat("Warning: 'climate_distance' column not found in data. Skipping bin creation.\n")
+}
+
 # Define continuous and categorical variables
 continuous_vars <- c(
   "import_from_slu_log", "age",
-  "distance_miles_log", 
-  "immigrant_density","state_percapita_income_log"
+  "distance_miles_log",
+  "immigrant_density","state_percapita_income_log",
+  "immigrant_similar", "immigrant_moderate"
 )
 
 categorical_model_vars <- c(
   "sex_enc", "marital_status_enc", "employment_status_enc",
-  "purpose_simple", "accomd_type_enc", 
+  "purpose_simple", "accomd_type_enc",
   "region_climate", "tourist_type_enc","us_state_enc"
 )
 
