@@ -273,7 +273,7 @@ if ("purpose_simple" %in% names(df_clean_nb) && "immigrant_density_centered" %in
     "los_capped ~",
     paste(existing_continuous, collapse = " + "),
     "+",
-    paste(existing_categorical[existing_categorical != "purpose_simple"], collapse = " + "),
+    paste(existing_categorical[existing_categorical != "purpose_simple" & existing_categorical != "us_state_enc"], collapse = " + "),
     "+ purpose_simple +",
     purpose_interactions,
     "+ (1|us_state_enc)"
@@ -338,7 +338,7 @@ if ("accomd_type_enc" %in% names(df_clean_nb) && "immigrant_density_centered" %i
     "los_capped ~",
     paste(existing_continuous, collapse = " + "),
     "+",
-    paste(existing_categorical[existing_categorical != "accomd_type_enc"], collapse = " + "),
+    paste(existing_categorical[existing_categorical != "accomd_type_enc" & existing_categorical != "us_state_enc"], collapse = " + "),
     "+ accomd_type_enc +",
     accomd_interactions,
     "+ (1|us_state_enc)"
