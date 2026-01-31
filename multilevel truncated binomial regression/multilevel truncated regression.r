@@ -258,28 +258,51 @@ if ("purpose_simple" %in% names(df_clean_nb) && "immigrant_density_centered" %in
   purpose_levels <- purpose_levels[!is.na(purpose_levels)]
 
   cat(paste("Creating interactions for", length(purpose_levels), "purpose categories\n"))
+  cat("Interacting purpose with: immigrant_density_centered, immigrant_similar, immigrant_moderate\n")
 
-  # Create interaction terms for each purpose
+  # Create interaction terms for each purpose with ALL THREE immigrant variables
   for (purpose in purpose_levels) {
-    var_name <- paste0("purpose_", purpose, "_x_immigrant")
-    df_clean_nb[[var_name]] <- ifelse(df_clean_nb$purpose_simple == purpose,
-                                      df_clean_nb$immigrant_density_centered,
-                                      0)
+    # Interaction with main immigrant density effect
+    var_name_main <- paste0("purpose_", purpose, "_x_immigrant_density")
+    df_clean_nb[[var_name_main]] <- ifelse(df_clean_nb$purpose_simple == purpose,
+                                           df_clean_nb$immigrant_density_centered,
+                                           0)
+
+    # Interaction with climate × immigrant interactions
+    var_name_similar <- paste0("purpose_", purpose, "_x_immigrant_similar")
+    df_clean_nb[[var_name_similar]] <- ifelse(df_clean_nb$purpose_simple == purpose,
+                                              df_clean_nb$immigrant_similar,
+                                              0)
+
+    var_name_moderate <- paste0("purpose_", purpose, "_x_immigrant_moderate")
+    df_clean_nb[[var_name_moderate]] <- ifelse(df_clean_nb$purpose_simple == purpose,
+                                               df_clean_nb$immigrant_moderate,
+                                               0)
   }
 
-  # Build formula with purpose interactions
-  purpose_interactions <- paste0("purpose_", purpose_levels, "_x_immigrant", collapse = " + ")
+  # Build formula with purpose interactions for all three immigrant variables
+  purpose_interactions_density <- paste0("purpose_", purpose_levels, "_x_immigrant_density", collapse = " + ")
+  purpose_interactions_similar <- paste0("purpose_", purpose_levels, "_x_immigrant_similar", collapse = " + ")
+  purpose_interactions_moderate <- paste0("purpose_", purpose_levels, "_x_immigrant_moderate", collapse = " + ")
+
+  # Remove immigrant variables from continuous vars (we'll add them back with interactions)
+  continuous_no_immigrant <- existing_continuous[!existing_continuous %in% c("immigrant_density_centered", "immigrant_similar", "immigrant_moderate")]
+
   formula_purpose <- paste(
     "los_capped ~",
-    paste(existing_continuous, collapse = " + "),
+    paste(continuous_no_immigrant, collapse = " + "),
     "+",
     paste(existing_categorical[existing_categorical != "purpose_simple" & existing_categorical != "us_state_enc"], collapse = " + "),
     "+ purpose_simple +",
-    purpose_interactions,
+    "immigrant_density_centered + immigrant_similar + immigrant_moderate +",
+    purpose_interactions_density, "+",
+    purpose_interactions_similar, "+",
+    purpose_interactions_moderate,
     "+ (1|us_state_enc)"
   )
 
-  cat("\nFitting model with purpose × immigrant_density interactions...\n")
+  cat("\nFitting model with purpose × all immigrant variables interactions...\n")
+  cat("Testing if purpose moderates: (1) immigrant_density, (2) climate×immigrant effects\n")
   trunc_nb_purpose <- glmmTMB(
     formula = as.formula(formula_purpose),
     data = df_clean_nb,
@@ -323,28 +346,51 @@ if ("accomd_type_enc" %in% names(df_clean_nb) && "immigrant_density_centered" %i
   accomd_levels <- accomd_levels[!is.na(accomd_levels)]
 
   cat(paste("Creating interactions for", length(accomd_levels), "accommodation categories\n"))
+  cat("Interacting accommodation with: immigrant_density_centered, immigrant_similar, immigrant_moderate\n")
 
-  # Create interaction terms for each accommodation type
+  # Create interaction terms for each accommodation type with ALL THREE immigrant variables
   for (accomd in accomd_levels) {
-    var_name <- paste0("accomd_", accomd, "_x_immigrant")
-    df_clean_nb[[var_name]] <- ifelse(df_clean_nb$accomd_type_enc == accomd,
-                                      df_clean_nb$immigrant_density_centered,
-                                      0)
+    # Interaction with main immigrant density effect
+    var_name_main <- paste0("accomd_", accomd, "_x_immigrant_density")
+    df_clean_nb[[var_name_main]] <- ifelse(df_clean_nb$accomd_type_enc == accomd,
+                                           df_clean_nb$immigrant_density_centered,
+                                           0)
+
+    # Interaction with climate × immigrant interactions
+    var_name_similar <- paste0("accomd_", accomd, "_x_immigrant_similar")
+    df_clean_nb[[var_name_similar]] <- ifelse(df_clean_nb$accomd_type_enc == accomd,
+                                              df_clean_nb$immigrant_similar,
+                                              0)
+
+    var_name_moderate <- paste0("accomd_", accomd, "_x_immigrant_moderate")
+    df_clean_nb[[var_name_moderate]] <- ifelse(df_clean_nb$accomd_type_enc == accomd,
+                                               df_clean_nb$immigrant_moderate,
+                                               0)
   }
 
-  # Build formula with accommodation interactions
-  accomd_interactions <- paste0("accomd_", accomd_levels, "_x_immigrant", collapse = " + ")
+  # Build formula with accommodation interactions for all three immigrant variables
+  accomd_interactions_density <- paste0("accomd_", accomd_levels, "_x_immigrant_density", collapse = " + ")
+  accomd_interactions_similar <- paste0("accomd_", accomd_levels, "_x_immigrant_similar", collapse = " + ")
+  accomd_interactions_moderate <- paste0("accomd_", accomd_levels, "_x_immigrant_moderate", collapse = " + ")
+
+  # Remove immigrant variables from continuous vars (we'll add them back with interactions)
+  continuous_no_immigrant <- existing_continuous[!existing_continuous %in% c("immigrant_density_centered", "immigrant_similar", "immigrant_moderate")]
+
   formula_accomd <- paste(
     "los_capped ~",
-    paste(existing_continuous, collapse = " + "),
+    paste(continuous_no_immigrant, collapse = " + "),
     "+",
     paste(existing_categorical[existing_categorical != "accomd_type_enc" & existing_categorical != "us_state_enc"], collapse = " + "),
     "+ accomd_type_enc +",
-    accomd_interactions,
+    "immigrant_density_centered + immigrant_similar + immigrant_moderate +",
+    accomd_interactions_density, "+",
+    accomd_interactions_similar, "+",
+    accomd_interactions_moderate,
     "+ (1|us_state_enc)"
   )
 
-  cat("\nFitting model with accommodation × immigrant_density interactions...\n")
+  cat("\nFitting model with accommodation × all immigrant variables interactions...\n")
+  cat("Testing if accommodation moderates: (1) immigrant_density, (2) climate×immigrant effects\n")
   trunc_nb_accomd <- glmmTMB(
     formula = as.formula(formula_accomd),
     data = df_clean_nb,
@@ -650,107 +696,109 @@ if (tolower(save_choice) == "y") {
 
     # Robustness Check 1: Purpose of Visit Interactions
     if (!is.null(trunc_nb_purpose) && exists("irr_purpose")) {
-      doc <- doc %>% body_add_par("Robustness Check 1: Purpose of Visit × Immigrant Density", style = "heading 2")
+      doc <- doc %>% body_add_par("Robustness Check 1: Purpose × All Immigrant Variables", style = "heading 2")
       doc <- doc %>% body_add_par(
-        "This model tests whether the effect of immigrant density varies by tourist purpose.
-        If immigrant networks matter, we would expect different effects for leisure vs business travelers.",
+        "This model tests whether the effect of immigrant variables varies by tourist purpose.
+        Interactions test if purpose moderates: (1) immigrant_density_centered, (2) immigrant_similar (climate interaction),
+        and (3) immigrant_moderate (climate interaction). This allows us to see if immigrant network effects
+        (or climate-immigrant confounding) differ for leisure vs business travelers.",
         style = "Normal"
       )
 
-      # Filter to show only interaction terms
-      purpose_interactions_only <- irr_purpose[grep("purpose.*immigrant", irr_purpose$Variable), ]
+      # Show FULL model results
+      doc <- doc %>% body_add_par("Full Model Results (All IRR)", style = "heading 3")
+      irr_purpose_formatted <- irr_purpose
+      irr_purpose_formatted$IRR <- formatC(irr_purpose_formatted$IRR, digits = 4, format = "f")
+      irr_purpose_formatted$Lower_CI <- formatC(irr_purpose_formatted$Lower_CI, digits = 4, format = "f")
+      irr_purpose_formatted$Upper_CI <- formatC(irr_purpose_formatted$Upper_CI, digits = 4, format = "f")
+      irr_purpose_formatted$P_value <- formatC(irr_purpose_formatted$P_value, digits = 4, format = "f")
 
-      if (nrow(purpose_interactions_only) > 0) {
-        purpose_interactions_only$IRR <- formatC(purpose_interactions_only$IRR, digits = 4, format = "f")
-        purpose_interactions_only$Lower_CI <- formatC(purpose_interactions_only$Lower_CI, digits = 4, format = "f")
-        purpose_interactions_only$Upper_CI <- formatC(purpose_interactions_only$Upper_CI, digits = 4, format = "f")
-        purpose_interactions_only$P_value <- formatC(purpose_interactions_only$P_value, digits = 4, format = "f")
+      purpose_ft <- flextable(irr_purpose_formatted) %>%
+        set_header_labels(
+          Variable = "Variable",
+          IRR = "IRR",
+          Lower_CI = "Lower CI",
+          Upper_CI = "Upper CI",
+          P_value = "P-value"
+        ) %>%
+        align(align = "left", part = "body", j = 1) %>%
+        align(align = "right", part = "body", j = 2:5) %>%
+        set_caption("Purpose Interaction Model: All Coefficients (IRR)") %>%
+        autofit()
+      doc <- doc %>% body_add_flextable(purpose_ft)
 
-        purpose_ft <- flextable(purpose_interactions_only) %>%
-          set_header_labels(
-            Variable = "Interaction Term",
-            IRR = "IRR",
-            Lower_CI = "Lower CI",
-            Upper_CI = "Upper CI",
-            P_value = "P-value"
-          ) %>%
-          align(align = "left", part = "body", j = 1) %>%
-          align(align = "right", part = "body", j = 2:5) %>%
-          set_caption("Purpose × Immigrant Density Interaction Effects") %>%
-          autofit()
-        doc <- doc %>% body_add_flextable(purpose_ft)
-
-        # Add model fit statistics for purpose model
-        doc <- doc %>% body_add_par("Model Fit Statistics", style = "heading 3")
-        purpose_fit_df <- data.frame(
-          Statistic = c("AIC", "BIC", "Log-likelihood"),
-          Value = round(c(AIC(trunc_nb_purpose), BIC(trunc_nb_purpose), as.numeric(logLik(trunc_nb_purpose))), 2)
-        )
-        purpose_fit_ft <- flextable(purpose_fit_df) %>% autofit()
-        doc <- doc %>% body_add_flextable(purpose_fit_ft)
-      } else {
-        doc <- doc %>% body_add_par("No interaction terms found in purpose model.", style = "Normal")
-      }
+      # Add model fit statistics for purpose model
+      doc <- doc %>% body_add_par("Model Fit Statistics", style = "heading 3")
+      purpose_fit_df <- data.frame(
+        Statistic = c("AIC", "BIC", "Log-likelihood"),
+        Value = round(c(AIC(trunc_nb_purpose), BIC(trunc_nb_purpose), as.numeric(logLik(trunc_nb_purpose))), 2)
+      )
+      purpose_fit_ft <- flextable(purpose_fit_df) %>% autofit()
+      doc <- doc %>% body_add_flextable(purpose_fit_ft)
     } else {
-      doc <- doc %>% body_add_par("Robustness Check 1: Purpose of Visit × Immigrant Density", style = "heading 2")
+      doc <- doc %>% body_add_par("Robustness Check 1: Purpose × All Immigrant Variables", style = "heading 2")
       doc <- doc %>% body_add_par("Model could not be estimated due to missing variables.", style = "Normal")
     }
 
     # Robustness Check 2: Accommodation Type Interactions
     if (!is.null(trunc_nb_accomd) && exists("irr_accomd")) {
-      doc <- doc %>% body_add_par("Robustness Check 2: Accommodation Type × Immigrant Density", style = "heading 2")
+      doc <- doc %>% body_add_par("Robustness Check 2: Accommodation × All Immigrant Variables", style = "heading 2")
       doc <- doc %>% body_add_par(
-        "This model tests whether the effect of immigrant density varies by accommodation type.
-        Tourists staying with friends/relatives might benefit more from immigrant networks than hotel guests.",
+        "This model tests whether the effect of immigrant variables varies by accommodation type.
+        Interactions test if accommodation moderates: (1) immigrant_density_centered, (2) immigrant_similar (climate interaction),
+        and (3) immigrant_moderate (climate interaction). Tourists staying with friends/relatives or in shared platforms
+        (Airbnb) might show different patterns than hotel guests.",
         style = "Normal"
       )
 
-      # Filter to show only interaction terms
-      accomd_interactions_only <- irr_accomd[grep("accomd.*immigrant", irr_accomd$Variable), ]
+      # Show FULL model results
+      doc <- doc %>% body_add_par("Full Model Results (All IRR)", style = "heading 3")
+      irr_accomd_formatted <- irr_accomd
+      irr_accomd_formatted$IRR <- formatC(irr_accomd_formatted$IRR, digits = 4, format = "f")
+      irr_accomd_formatted$Lower_CI <- formatC(irr_accomd_formatted$Lower_CI, digits = 4, format = "f")
+      irr_accomd_formatted$Upper_CI <- formatC(irr_accomd_formatted$Upper_CI, digits = 4, format = "f")
+      irr_accomd_formatted$P_value <- formatC(irr_accomd_formatted$P_value, digits = 4, format = "f")
 
-      if (nrow(accomd_interactions_only) > 0) {
-        accomd_interactions_only$IRR <- formatC(accomd_interactions_only$IRR, digits = 4, format = "f")
-        accomd_interactions_only$Lower_CI <- formatC(accomd_interactions_only$Lower_CI, digits = 4, format = "f")
-        accomd_interactions_only$Upper_CI <- formatC(accomd_interactions_only$Upper_CI, digits = 4, format = "f")
-        accomd_interactions_only$P_value <- formatC(accomd_interactions_only$P_value, digits = 4, format = "f")
+      accomd_ft <- flextable(irr_accomd_formatted) %>%
+        set_header_labels(
+          Variable = "Variable",
+          IRR = "IRR",
+          Lower_CI = "Lower CI",
+          Upper_CI = "Upper CI",
+          P_value = "P-value"
+        ) %>%
+        align(align = "left", part = "body", j = 1) %>%
+        align(align = "right", part = "body", j = 2:5) %>%
+        set_caption("Accommodation Interaction Model: All Coefficients (IRR)") %>%
+        autofit()
+      doc <- doc %>% body_add_flextable(accomd_ft)
 
-        accomd_ft <- flextable(accomd_interactions_only) %>%
-          set_header_labels(
-            Variable = "Interaction Term",
-            IRR = "IRR",
-            Lower_CI = "Lower CI",
-            Upper_CI = "Upper CI",
-            P_value = "P-value"
-          ) %>%
-          align(align = "left", part = "body", j = 1) %>%
-          align(align = "right", part = "body", j = 2:5) %>%
-          set_caption("Accommodation Type × Immigrant Density Interaction Effects") %>%
-          autofit()
-        doc <- doc %>% body_add_flextable(accomd_ft)
-
-        # Add model fit statistics for accommodation model
-        doc <- doc %>% body_add_par("Model Fit Statistics", style = "heading 3")
-        accomd_fit_df <- data.frame(
-          Statistic = c("AIC", "BIC", "Log-likelihood"),
-          Value = round(c(AIC(trunc_nb_accomd), BIC(trunc_nb_accomd), as.numeric(logLik(trunc_nb_accomd))), 2)
-        )
-        accomd_fit_ft <- flextable(accomd_fit_df) %>% autofit()
-        doc <- doc %>% body_add_flextable(accomd_fit_ft)
-      } else {
-        doc <- doc %>% body_add_par("No interaction terms found in accommodation model.", style = "Normal")
-      }
+      # Add model fit statistics for accommodation model
+      doc <- doc %>% body_add_par("Model Fit Statistics", style = "heading 3")
+      accomd_fit_df <- data.frame(
+        Statistic = c("AIC", "BIC", "Log-likelihood"),
+        Value = round(c(AIC(trunc_nb_accomd), BIC(trunc_nb_accomd), as.numeric(logLik(trunc_nb_accomd))), 2)
+      )
+      accomd_fit_ft <- flextable(accomd_fit_df) %>% autofit()
+      doc <- doc %>% body_add_flextable(accomd_fit_ft)
     } else {
-      doc <- doc %>% body_add_par("Robustness Check 2: Accommodation Type × Immigrant Density", style = "heading 2")
+      doc <- doc %>% body_add_par("Robustness Check 2: Accommodation × All Immigrant Variables", style = "heading 2")
       doc <- doc %>% body_add_par("Model could not be estimated due to missing variables.", style = "Normal")
     }
 
     # Add interpretation note
     doc <- doc %>% body_add_par("Interpretation of Robustness Checks", style = "heading 2")
     doc <- doc %>% body_add_par(
-      "Non-significant interaction terms across both robustness checks would indicate that
-      immigrant density effects (or lack thereof) are consistent across tourist purposes and
-      accommodation types. This supports the interpretation that climate similarity, rather than
-      immigrant networks, drives the observed patterns in tourist behavior.",
+      "These robustness checks test whether tourist purpose or accommodation type moderates
+      the relationship between immigrant variables and length of stay. Each model includes
+      interactions with: (1) immigrant_density_centered (main effect), (2) immigrant_similar
+      (climate interaction), and (3) immigrant_moderate (climate interaction).
+
+      Non-significant interactions would indicate that immigrant effects (or climate-immigrant
+      confounding) are consistent across purposes and accommodation types. Significant interactions
+      would suggest heterogeneous effects - for example, if Airbnb guests show stronger
+      immigrant network effects than hotel guests, or if leisure travelers respond differently
+      to climate-immigrant patterns than business travelers.",
       style = "Normal"
     )
 
