@@ -551,8 +551,13 @@ r2_results <- r2(trunc_nb_model)
 print(r2_results)
 
 # Add random-effect BLUPs and R2 to results_list for saving
-results_list$random_effects_values <- if (exists("re_df")) re_df else NULL
+results_list$random_effects_values <- if (exists("re_df")) re_df else NULLdf
 results_list$r2_results <- r2_results
+
+# Export csv of dataframe with predictions, residuals, and interactions for further analysis
+output_data <- df_clean_nb
+output_csv_file <- file.path(temp_dir, "model_predictions_residuals.csv")
+write.csv(output_data, output_csv_file, row.names = FALSE)  
 
 # Ask user where to save results
 cat("\nWould you like to save the results? (y/n): ")
